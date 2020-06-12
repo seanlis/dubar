@@ -1,12 +1,8 @@
 EPUBJS.reader.BookmarksController = function() {
 	var reader = this;
-	var book = this.book;
-	var rendition = this.rendition;
 
 	var $bookmarks = $("#bookmarksView"),
 			$list = $bookmarks.find("#bookmarks");
-
-	var docfrag = document.createDocumentFragment();
 
 	var show = function() {
 		$bookmarks.show();
@@ -25,10 +21,10 @@ EPUBJS.reader.BookmarksController = function() {
 		listitem.id = "bookmark-"+counter;
 		listitem.classList.add('list_item');
 
-		var spineItem = book.spine.get(cfi);
+		var spineItem = reader.book.spine.get(cfi);
 		var tocItem;
-		if (spineItem.index in book.navigation.toc) {
-			tocItem = book.navigation.toc[spineItem.index];
+		if (spineItem.index in reader.book.navigation.toc) {
+			tocItem = reader.book.navigation.toc[spineItem.index];
 			link.textContent = tocItem.label;
 		} else {
 			link.textContent = cfi;
@@ -40,7 +36,7 @@ EPUBJS.reader.BookmarksController = function() {
 
 		link.addEventListener("click", function(event){
 				var cfi = this.getAttribute('href');
-				rendition.display(cfi);
+				reader.rendition.display(cfi);
 				event.preventDefault();
 		}, false);
 
@@ -51,12 +47,19 @@ EPUBJS.reader.BookmarksController = function() {
 		return listitem;
 	};
 
-	this.settings.bookmarks.forEach(function(cfi) {
-		var bookmark = createBookmarkItem(cfi);
-		docfrag.appendChild(bookmark);
-	});
+	this.on("reader:bookready", function() {
+		$list.empty();
 
-	$list.append(docfrag);
+		var docfrag = document.createDocumentFragment();
+
+		counter = 0;
+		reader.settings.bookmarks.forEach(function(cfi) {
+			var bookmark = createBookmarkItem(cfi);
+			docfrag.appendChild(bookmark);
+		});
+
+		$list.append(docfrag);
+	});
 
 	this.on("reader:bookmarked", function(cfi) {
 		var item = createBookmarkItem(cfi);

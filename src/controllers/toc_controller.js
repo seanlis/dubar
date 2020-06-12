@@ -1,9 +1,8 @@
 EPUBJS.reader.TocController = function(toc) {
+	var reader = this;
 	var book = this.book;
-	var rendition = this.rendition;
 
-	var $list = $("#tocView"),
-			docfrag = document.createDocumentFragment();
+	var $list = $("#tocView");
 
 	var currentChapter = false;
 
@@ -73,33 +72,36 @@ EPUBJS.reader.TocController = function(toc) {
 		}
 	};
 
-	rendition.on('renderered', chapterChange);
 
-	var tocitems = generateTocItems(toc);
+	this.on("reader:bookloaded", function (toc) {
+		$list.empty();
 
-	docfrag.appendChild(tocitems);
+		var tocitems = generateTocItems(toc);
 
-	$list.append(docfrag);
-	$list.find(".toc_link").on("click", function(event){
+		var docfrag = document.createDocumentFragment();
+		docfrag.appendChild(tocitems);
+
+		$list.append(docfrag);
+		$list.find(".toc_link").on("click", function(event){
 			var url = this.getAttribute('href');
 
 			event.preventDefault();
 
 			//-- Provide the Book with the url to show
 			//   The Url must be found in the books manifest
-			rendition.display(url);
+			reader.rendition.display(url);
 
 			$list.find(".currentChapter")
-					.addClass("openChapter")
-					.removeClass("currentChapter");
+				.addClass("openChapter")
+				.removeClass("currentChapter");
 
 			$(this).parent('li').addClass("currentChapter");
 
-	});
+		});
 
-	$list.find(".toc_toggle").on("click", function(event){
+		$list.find(".toc_toggle").on("click", function(event){
 			var $el = $(this).parent('li'),
-					open = $el.hasClass("openChapter");
+				open = $el.hasClass("openChapter");
 
 			event.preventDefault();
 			if(open){
@@ -107,6 +109,9 @@ EPUBJS.reader.TocController = function(toc) {
 			} else {
 				$el.addClass("openChapter");
 			}
+		});
+
+		reader.rendition.on('renderered', chapterChange);
 	});
 
 	return {

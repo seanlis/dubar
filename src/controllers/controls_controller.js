@@ -1,6 +1,5 @@
 EPUBJS.reader.ControlsController = function(book) {
 	var reader = this;
-	var rendition = this.rendition;
 
 	var $store = $("#store"),
 			$fullscreen = $("#fullscreen"),
@@ -10,7 +9,8 @@ EPUBJS.reader.ControlsController = function(book) {
 			$main = $("#main"),
 			$sidebar = $("#sidebar"),
 			$settings = $("#setting"),
-			$bookmark = $("#bookmark");
+			$bookmark = $("#bookmark"),
+			$openfile = $("#open");
 	/*
 	var goOnline = function() {
 		reader.offline = false;
@@ -59,6 +59,11 @@ EPUBJS.reader.ControlsController = function(book) {
 		}
 	}
 
+	$openfile.on("change", function(e) {
+		var file = e.target.files[0];
+		reader.openBookFromFile(file);
+	});
+
 	$settings.on("click", function() {
 		reader.SettingsController.show();
 	});
@@ -81,29 +86,32 @@ EPUBJS.reader.ControlsController = function(book) {
 
 	});
 
-	rendition.on('relocated', function(location){
-		var cfi = location.start.cfi;
-		var cfiFragment = "#" + cfi;
-		//-- Check if bookmarked
-		var bookmarked = reader.isBookmarked(cfi);
-		if(bookmarked === -1) { //-- Not bookmarked
-			$bookmark
-				.removeClass("icon-bookmark")
-				.addClass("icon-bookmark-empty");
-		} else { //-- Bookmarked
-			$bookmark
-				.addClass("icon-bookmark")
-				.removeClass("icon-bookmark-empty");
-		}
 
-		reader.currentLocationCfi = cfi;
+	this.on("reader:bookready", function () {
+		reader.rendition.on('relocated', function(location){
+			var cfi = location.start.cfi;
+			var cfiFragment = "#" + cfi;
+			//-- Check if bookmarked
+			var bookmarked = reader.isBookmarked(cfi);
+			if(bookmarked === -1) { //-- Not bookmarked
+				$bookmark
+					.removeClass("icon-bookmark")
+					.addClass("icon-bookmark-empty");
+			} else { //-- Bookmarked
+				$bookmark
+					.addClass("icon-bookmark")
+					.removeClass("icon-bookmark-empty");
+			}
 
-		// Update the History Location
-		if(reader.settings.history &&
+			reader.currentLocationCfi = cfi;
+
+			// Update the History Location
+			if(reader.settings.history &&
 				window.location.hash != cfiFragment) {
-			// Add CFI fragment to the history
-			history.pushState({}, '', cfiFragment);
-		}
+				// Add CFI fragment to the history
+				history.pushState({}, '', cfiFragment);
+			}
+		});
 	});
 
 	return {

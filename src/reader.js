@@ -25,7 +25,6 @@ EPUBJS.Reader = function(bookPath, _options) {
 	var reader = this;
 	var book;
 	var plugin;
-	var $viewer = $("#viewer");
 	var search = window.location.search;
 	var parameters;
 
@@ -54,83 +53,125 @@ EPUBJS.Reader = function(bookPath, _options) {
 		});
 	}
 
-	this.setBookKey(this.settings.bookPath); //-- This could be username + path or any unique string
+	this.boundHashChanged = this.hashChanged.bind(this);
+	this.boundAdjustFontSize = this.adjustFontSize.bind(this);
 
-	if(this.settings.restore && this.isSaved()) {
-		this.applySavedSettings();
-	}
+	reader.ReaderController = EPUBJS.reader.ReaderController.call(reader, book);
+	reader.SettingsController = EPUBJS.reader.SettingsController.call(reader, book);
+	reader.ControlsController = EPUBJS.reader.ControlsController.call(reader, book);
+	reader.SidebarController = EPUBJS.reader.SidebarController.call(reader, book);
+	reader.BookmarksController = EPUBJS.reader.BookmarksController.call(reader, book);
+//	reader.NotesController = EPUBJS.reader.NotesController.call(reader, book);
 
-	this.settings.styles = this.settings.styles || {
-		fontSize : "100%"
-	};
-
-	this.book = book = new ePub(this.settings.bookPath, this.settings);
-
-	this.offline = false;
-	this.sidebarOpen = false;
-	if(!this.settings.bookmarks) {
-		this.settings.bookmarks = [];
-	}
-
-	if(!this.settings.annotations) {
-		this.settings.annotations = [];
-	}
-
-	if(this.settings.generatePagination) {
-		book.generatePagination($viewer.width(), $viewer.height());
-	}
-
-	this.rendition = book.renderTo("viewer", {
-		ignoreClass: "annotator-hl",
-		width: "100%",
-		height: "100%"
-	});
-
-	if(this.settings.previousLocationCfi) {
-		this.displayed = this.rendition.display(this.settings.previousLocationCfi);
-	} else {
-		this.displayed = this.rendition.display();
-	}
-
-	book.ready.then(function () {
-		reader.ReaderController = EPUBJS.reader.ReaderController.call(reader, book);
-		reader.SettingsController = EPUBJS.reader.SettingsController.call(reader, book);
-		reader.ControlsController = EPUBJS.reader.ControlsController.call(reader, book);
-		reader.SidebarController = EPUBJS.reader.SidebarController.call(reader, book);
-		reader.BookmarksController = EPUBJS.reader.BookmarksController.call(reader, book);
-		reader.NotesController = EPUBJS.reader.NotesController.call(reader, book);
-
-		window.addEventListener("hashchange", this.hashChanged.bind(this), false);
-
-		document.addEventListener('keydown', this.adjustFontSize.bind(this), false);
-
-		this.rendition.on("keydown", this.adjustFontSize.bind(this));
-		this.rendition.on("keydown", reader.ReaderController.arrowKeys.bind(this));
-
-		this.rendition.on("selected", this.selectedRange.bind(this));
-	}.bind(this)).then(function() {
-		reader.ReaderController.hideLoader();
-	}.bind(this));
-
-	// Call Plugins
-	for(plugin in EPUBJS.reader.plugins) {
-		if(EPUBJS.reader.plugins.hasOwnProperty(plugin)) {
-			reader[plugin] = EPUBJS.reader.plugins[plugin].call(reader, book);
-		}
-	}
-
-	book.loaded.metadata.then(function(meta) {
-		reader.MetaController = EPUBJS.reader.MetaController.call(reader, meta);
-	});
-
-	book.loaded.navigation.then(function(navigation) {
-		reader.TocController = EPUBJS.reader.TocController.call(reader, navigation);
-	});
+	reader.TocController = EPUBJS.reader.TocController.call(reader);
 
 	window.addEventListener("beforeunload", this.unload.bind(this), false);
 
 	return this;
 };
+
+EPUBJS.Reader.prototype.openBookFromFile = function(file) {
+	var closeBook = function () {
+		if (this.book) {
+			this.unload();
+			this.book.destroy();
+		}
+
+		this.settings.bookPath = undefined;
+		this.settings.bookmarks = undefined;
+		this.settings.annotations = undefined;
+		this.settings.contained = undefined;
+		this.settings.bookKey = undefined;
+		this.settings.styles = undefined;
+		delete this.settings.previousLocationCfi;
+	}
+
+	var openBook = function (e) {
+		var reader = this;
+		var book;
+		var $viewer = $("#viewer");
+
+		this.settings.bookPath = file.name;
+		this.setBookKey(this.settings.bookPath); //-- This could be username + path or any unique string
+
+		if(this.settings.restore && this.isSaved()) {
+			this.applySavedSettings();
+		}
+
+		this.settings.styles = this.settings.styles || {
+			fontSize : "100%"
+		};
+
+		this.book = book = new ePub(undefined, this.settings);
+		var bookData = e.target.result;
+		this.book.open(bookData);
+
+		this.offline = false;
+		this.sidebarOpen = false;
+		if(!this.settings.bookmarks) {
+			this.settings.bookmarks = [];
+		}
+
+		if(!this.settings.annotations) {
+			this.settings.annotations = [];
+		}
+
+		if(this.settings.generatePagination) {
+			book.generatePagination($viewer.width(), $viewer.height());
+		}
+
+		this.rendition = book.renderTo("viewer", {
+			ignoreClass: "annotator-hl",
+			width: "100%",
+			height: "100%"
+		});
+
+		if(this.settings.previousLocationCfi) {
+			this.displayed = this.rendition.display(this.settings.previousLocationCfi);
+		} else {
+			this.displayed = this.rendition.display();
+		}
+
+		book.ready.then(function () {
+			this.trigger("reader:bookready");
+
+			window.addEventListener("hashchange", this.boundHashChanged, false);
+
+			document.addEventListener('keydown', this.boundAdjustFontSize, false);
+
+			this.rendition.on("keydown", this.adjustFontSize.bind(this));
+			this.rendition.on("keydown", reader.ReaderController.arrowKeys.bind(this));
+
+			this.rendition.on("selected", this.selectedRange.bind(this));
+		}.bind(this)).then(function() {
+			this.ReaderController.hideLoader();
+		}.bind(this));
+
+		// Call Plugins
+		for(plugin in EPUBJS.reader.plugins) {
+			if(EPUBJS.reader.plugins.hasOwnProperty(plugin)) {
+				reader[plugin] = EPUBJS.reader.plugins[plugin].call(reader, book);
+			}
+		}
+
+		book.loaded.metadata.then(function(meta) {
+			reader.MetaController = EPUBJS.reader.MetaController.call(reader, meta);
+		});
+
+		book.loaded.navigation.then(function(navigation) {
+			reader.trigger("reader:bookloaded", navigation);
+		});
+
+	};
+
+	closeBook.bind(this)();
+
+	if (window.FileReader) {
+		var filereader = new FileReader();
+		filereader.onload = openBook.bind(this);
+		filereader.readAsArrayBuffer(file);
+	}
+}
 
 EPUBJS.Reader.prototype.adjustFontSize = function(e) {
 	var fontSize;
