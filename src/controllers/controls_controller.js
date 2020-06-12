@@ -60,8 +60,10 @@ EPUBJS.reader.ControlsController = function(book) {
 	}
 
 	$openfile.on("change", function(e) {
-		var file = e.target.files[0];
-		reader.openBookFromFile(file);
+		if(e.target.files.length > 0) {
+			var file = e.target.files[0];
+			reader.openBookFromFile(file);
+		}
 	});
 
 	$settings.on("click", function() {

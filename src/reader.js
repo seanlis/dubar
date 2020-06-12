@@ -165,6 +165,7 @@ EPUBJS.Reader.prototype.openBookFromFile = function(file) {
 	};
 
 	closeBook.bind(this)();
+	this.ReaderController.showLoader();
 
 	if (window.FileReader) {
 		var filereader = new FileReader();

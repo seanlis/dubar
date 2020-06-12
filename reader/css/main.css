@@ -304,6 +304,7 @@ input:-ms-placeholder {
   left: 50%;
   top: 50%;
   margin: -33px 0 0 -33px;
+  display: none;
 }
 
 #tocView,
