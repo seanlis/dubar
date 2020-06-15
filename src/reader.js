@@ -142,7 +142,7 @@ EPUBJS.Reader.prototype.openBookFromFile = function(file) {
 			this.rendition.on("keydown", this.adjustFontSize.bind(this));
 			this.rendition.on("keydown", reader.ReaderController.arrowKeys.bind(this));
 
-			this.rendition.on("selected", this.selectedRange.bind(this));
+			//this.rendition.on("selected", this.selectedRange.bind(this));
 		}.bind(this)).then(function() {
 			this.ReaderController.hideLoader();
 		}.bind(this));
