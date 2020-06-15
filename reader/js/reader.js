@@ -3736,6 +3736,9 @@ EPUBJS.reader.ControlsController = function(book) {
 				history.pushState({}, '', cfiFragment);
 			}
 		});
+
+		$bookmark.removeClass("hidden-icon");
+		$slider.removeClass("hidden-icon");
 	});
 
 	return {
@@ -4052,7 +4055,8 @@ EPUBJS.reader.ReaderController = function(book) {
 			$divider = $("#divider"),
 			$loader = $("#loader"),
 			$next = $("#next"),
-			$prev = $("#prev");
+			$prev = $("#prev"),
+			$arrows = $(".arrow");
 	var reader = this;
 	var book = this.book;
 	var rendition = this.rendition;
@@ -4147,7 +4151,6 @@ EPUBJS.reader.ReaderController = function(book) {
 		}
 	}
 
-	document.addEventListener('keydown', arrowKeys, false);
 
 	$next.on("click", function(e){
 
@@ -4172,6 +4175,9 @@ EPUBJS.reader.ReaderController = function(book) {
 	});
 
 	this.on("reader:bookready", function () {
+		$arrows.show();
+		document.addEventListener('keydown', arrowKeys, false);
+
 		reader.rendition.on("layout", function(props){
 			if(props.spread === true) {
 				showDivider();

@@ -114,6 +114,9 @@ EPUBJS.reader.ControlsController = function(book) {
 				history.pushState({}, '', cfiFragment);
 			}
 		});
+
+		$bookmark.removeClass("hidden-icon");
+		$slider.removeClass("hidden-icon");
 	});
 
 	return {

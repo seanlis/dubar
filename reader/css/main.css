@@ -141,6 +141,7 @@ body {
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  display: none;
 }
 
 .arrow:hover {
@@ -828,3 +829,7 @@ input:-ms-placeholder {
 .icon-edit:before { content: '\e814'; } /* '' */
 .icon-right:before { content: '\e815'; } /* '' */
 .icon-folder-open-empty:before { content: '\f115'; } /* '' */
+
+#titlebar .hidden-icon, .hidden-icon:before {
+  display: none;
+}
