@@ -4113,6 +4113,10 @@ EPUBJS.reader.ReaderController = function(book) {
 	var keylock = false;
 
 	var arrowKeys = function(e) {
+		if(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+			return;
+		}
+
 		if(e.keyCode == 37) {
 
 			if(reader.book.package.metadata.direction === "rtl") {
