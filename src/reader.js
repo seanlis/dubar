@@ -92,7 +92,8 @@ EPUBJS.Reader.prototype.openBookFromFile = function(file) {
 		var $viewer = $("#viewer");
 
 		this.settings.bookPath = file.name;
-		this.setBookKey(this.settings.bookPath); //-- This could be username + path or any unique string
+		var hash = sha256(e.target.result);
+		this.setBookKey('sha256:' + hash);
 
 		if(this.settings.restore && this.isSaved()) {
 			this.applySavedSettings();
@@ -269,7 +270,7 @@ EPUBJS.Reader.prototype.clearNotes = function() {
 //-- Settings
 EPUBJS.Reader.prototype.setBookKey = function(identifier){
 	if(!this.settings.bookKey) {
-		this.settings.bookKey = "epubjsreader:" + EPUBJS.VERSION + ":" + window.location.host + ":" + identifier;
+		this.settings.bookKey = identifier;
 	}
 	return this.settings.bookKey;
 };

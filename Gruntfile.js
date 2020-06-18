@@ -40,6 +40,7 @@ module.exports = function(grunt) {
 					{src: 'hooks/extensions/highlight.js', dest: 'reader/js/hooks/extensions/highlight.js'},
 					{src: 'node_modules/epubjs/dist/epub.min.js', dest: 'reader/js/epub.min.js'},
 					{src: 'node_modules/epubjs/dist/epub.js', dest: 'reader/js/epub.js'},
+					{src: 'node_modules/js-sha256/build/sha256.min.js', dest: 'reader/js/sha256.min.js'},
 					// {src: 'node_modules/epubjs/build/hooks.min.js', dest: 'reader/js/hooks.min.js'}
 				]
 			},
