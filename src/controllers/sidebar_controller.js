@@ -9,7 +9,7 @@ EPUBJS.reader.SidebarController = function(book) {
 	var changePanelTo = function(viewName) {
 		var controllerName = viewName + "Controller";
 		
-		if(activePanel == viewName || typeof reader[controllerName] === 'undefined' ) return;
+		if((activePanel == viewName && viewName != "Search") || typeof reader[controllerName] === 'undefined') return;
 		reader[activePanel+ "Controller"].hide();
 		reader[controllerName].show();
 		activePanel = viewName;

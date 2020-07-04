@@ -1,23 +1,3 @@
-EPUBJS.reader.search = {};
-
-// Search Server -- https://github.com/futurepress/epubjs-search
-EPUBJS.reader.search.SERVER = "https://pacific-cliffs-3579.herokuapp.com";
-
-EPUBJS.reader.search.request = function(q, callback) {
-	var fetch = $.ajax({
-		dataType: "json",
-		url: EPUBJS.reader.search.SERVER + "/search?q=" + encodeURIComponent(q) 
-	});
-
-	fetch.fail(function(err) {
-		console.error(err);
-	});
-
-	fetch.done(function(results) {
-		callback(results);
-	});
-};
-
 EPUBJS.reader.plugins.SearchController = function(Book) {
 	var reader = this;
 	
@@ -27,6 +7,8 @@ EPUBJS.reader.plugins.SearchController = function(Book) {
 			iframeDoc;
 	
 	var searchShown = false;
+
+	var queryString = '';
 	
 	var onShow = function() {
 		query();
@@ -38,55 +20,62 @@ EPUBJS.reader.plugins.SearchController = function(Book) {
 		searchShown = false;
 		$searchView.removeClass("shown");
 	};
-	
+
+	var search = function (q) {
+		var book = reader.book;
+		return Promise.all(
+			book.spine.spineItems.map(item => item.load(book.load.bind(book)).then(item.find.bind(item, q)).finally(item.unload.bind(item)))
+		).then(results => [].concat.apply([], results));
+	};
+
+	var highlightQuery = function () {
+		if(queryString == '') {
+			return;
+		}
+
+		iframeDoc = $("#viewer iframe")[0].contentDocument;
+		$(iframeDoc).find('body').highlight(queryString, { element: 'span' });
+	};
+
 	var query = function() {
-		var q = $searchBox.val();
+		queryString = $searchBox.val();
 		
-		if(q == '') {
+		if(queryString == '') {
 			return;
 		}
 		
 		$searchResults.empty();
 		$searchResults.append("<li><p>Searching...</p></li>");
-		
-		
-		
-		EPUBJS.reader.search.request(q, function(data) {
-			var results = data.results;
-			
+
+		search(queryString).then(function(results) {
 			$searchResults.empty();
 			
-			if(iframeDoc) { 
+			if(iframeDoc) {
 				$(iframeDoc).find('body').unhighlight();
 			}
-			
+
 			if(results.length == 0) {
 				$searchResults.append("<li><p>No Results Found</p></li>");
 				return;
 			}
 			
-			iframeDoc = $("#viewer iframe")[0].contentDocument;
-			$(iframeDoc).find('body').highlight(q, { element: 'span' });
-			
+			highlightQuery();
+
 			results.forEach(function(result) {
 				var $li = $("<li></li>");
-				var $item = $("<a href='"+result.href+"' data-cfi='"+result.cfi+"'><span>"+result.title+"</span><p>"+result.highlight+"</p></a>");
+				var $item = $("<a href='#"+result.cfi+"' data-cfi='"+result.cfi+"'><p>"+result.excerpt+"</p></a>");
 	
 				$item.on("click", function(e) {
 					var $this = $(this),
 							cfi = $this.data("cfi");
 					
 					e.preventDefault();
-					
-					Book.gotoCfi(cfi+"/1:0");
-					
-					Book.on("renderer:chapterDisplayed", function() {
-						iframeDoc = $("#viewer iframe")[0].contentDocument;
-						$(iframeDoc).find('body').highlight(q, { element: 'span' });
-					})
-					
-					
-					
+
+					if(iframeDoc) {
+						$(iframeDoc).find('body').unhighlight();
+					}
+
+					reader.rendition.display(cfi);
 				});
 				$li.append($item);
 				$searchResults.append($li);
@@ -97,10 +86,10 @@ EPUBJS.reader.plugins.SearchController = function(Book) {
 	};
 	
 	$searchBox.on("search", function(e) {
-		var q = $searchBox.val();
+		queryString = $searchBox.val();
 		
 		//-- SearchBox is empty or cleared
-		if(q == '') {
+		if(queryString == '') {
 			$searchResults.empty();
 			if(reader.SidebarController.getActivePanel() == "Search") {
 				reader.SidebarController.changePanelTo("Toc");
@@ -116,7 +105,13 @@ EPUBJS.reader.plugins.SearchController = function(Book) {
 		e.preventDefault();
 	});
 	
-	
+	reader.on("reader:bookready", function() {
+		reader.rendition.hooks.content.register(function(contents){
+			return contents.addStylesheetCss(".highlight { background-color: yellow }", "search");
+		});
+
+		reader.rendition.on('relocated', highlightQuery);
+	});
 	
 	return {
 		"show" : onShow,

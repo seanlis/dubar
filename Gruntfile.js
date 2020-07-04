@@ -37,6 +37,7 @@ module.exports = function(grunt) {
 				  {src: 'node_modules/screenfull/dist/screenfull.js', dest: 'reader/js/libs/screenfull.js'},
 					{src: 'src/plugins/search.js', dest: 'reader/js/plugins/search.js'},
 					{src: 'src/plugins/hypothesis.js', dest: 'reader/js/plugins/hypothesis.js'},
+					{src: 'node_modules/jquery-highlight/jquery.highlight.js', dest:'reader/js/libs/jquery.highlight.js'},
 					{src: 'hooks/extensions/highlight.js', dest: 'reader/js/hooks/extensions/highlight.js'},
 					{src: 'node_modules/epubjs/dist/epub.min.js', dest: 'reader/js/epub.min.js'},
 					{src: 'node_modules/epubjs/dist/epub.js', dest: 'reader/js/epub.js'},

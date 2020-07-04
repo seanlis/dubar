@@ -63,6 +63,13 @@ EPUBJS.Reader = function(bookPath, _options) {
 	reader.BookmarksController = EPUBJS.reader.BookmarksController.call(reader, book);
 //	reader.NotesController = EPUBJS.reader.NotesController.call(reader, book);
 
+	// Call Plugins
+	for(plugin in EPUBJS.reader.plugins) {
+		if(EPUBJS.reader.plugins.hasOwnProperty(plugin)) {
+			reader[plugin] = EPUBJS.reader.plugins[plugin].call(reader, book);
+		}
+	}
+
 	reader.TocController = EPUBJS.reader.TocController.call(reader);
 
 	window.addEventListener("beforeunload", this.unload.bind(this), false);
@@ -147,13 +154,6 @@ EPUBJS.Reader.prototype.openBookFromFile = function(file) {
 		}.bind(this)).then(function() {
 			this.ReaderController.hideLoader();
 		}.bind(this));
-
-		// Call Plugins
-		for(plugin in EPUBJS.reader.plugins) {
-			if(EPUBJS.reader.plugins.hasOwnProperty(plugin)) {
-				reader[plugin] = EPUBJS.reader.plugins[plugin].call(reader, book);
-			}
-		}
 
 		book.loaded.metadata.then(function(meta) {
 			reader.MetaController = EPUBJS.reader.MetaController.call(reader, meta);

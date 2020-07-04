@@ -32,6 +32,7 @@
   "dependencies": {
     "epubjs": "latest",
     "jquery": "^3.3.1",
+    "jquery-highlight": "^3.5.0",
     "js-sha256": "^0.9.0",
     "jszip": "^3.1.5",
     "localforage": "^1.2.10",
