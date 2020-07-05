@@ -38,11 +38,12 @@ EPUBJS.reader.plugins.SearchController = function(Book) {
 	};
 
 	var query = function() {
-		queryString = $searchBox.val();
+		var q = $searchBox.val();
 		
-		if(queryString == '') {
+		if(q == '' || q == queryString ) {
 			return;
 		}
+		queryString = q;
 		
 		$searchResults.empty();
 		$searchResults.append("<li><p>Searching...</p></li>");
@@ -86,14 +87,16 @@ EPUBJS.reader.plugins.SearchController = function(Book) {
 	};
 	
 	$searchBox.on("search", function(e) {
-		queryString = $searchBox.val();
+		var q = $searchBox.val();
 		
 		//-- SearchBox is empty or cleared
-		if(queryString == '') {
+		if(q == '') {
 			$searchResults.empty();
 			if(reader.SidebarController.getActivePanel() == "Search") {
 				reader.SidebarController.changePanelTo("Toc");
 			}
+
+			queryString = q;
 			
 			$(iframeDoc).find('body').unhighlight();
 			iframeDoc = false;
