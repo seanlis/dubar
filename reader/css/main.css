@@ -109,7 +109,6 @@ body {
   height: 80%;
   /* margin-left: 10%; */
   margin: 0 auto;
-  max-width: 1250px;
   z-index: 2;
   position: relative;
   overflow: hidden;
@@ -660,11 +659,6 @@ input:-ms-placeholder {
 }
 
 @media only screen and (max-width: 1040px) {
-  #viewer{
-    width: 50%;
-    margin-left: 25%;
-  }
-
   #divider,
   #divider.show {
     display: none;
@@ -672,9 +666,8 @@ input:-ms-placeholder {
 }
 
 @media only screen and (max-width: 900px) {
-  #viewer{
-    width: 60%;
-    margin-left: 20%;
+  #viewer {
+    height: 94%;
   }
 
   #prev {
@@ -684,12 +677,15 @@ input:-ms-placeholder {
   #next {
     right: 20px;
   }
+
+  #titlebar {
+    height: 4%;
+  }
 }
 
 @media only screen and (max-width: 550px) {
-  #viewer{
-    width: 80%;
-    margin-left: 10%;
+  #viewer {
+    width: 100%;
   }
 
   #prev {
@@ -705,6 +701,7 @@ input:-ms-placeholder {
     top: 45px;
     width: 10%;
     text-indent: -10000px;
+    z-index: 3;
   }
 
   #main {
@@ -747,35 +744,15 @@ input:-ms-placeholder {
 
 /* For iPad portrait layouts only */
 @media only screen and (min-device-width: 481px) and (max-device-width: 1024px) and (orientation: portrait) {
-    #viewer iframe {
-        width: 460px;
-        height: 740px;
-    }
 }
  /*For iPad landscape layouts only */
 @media only screen and (min-device-width: 481px) and (max-device-width: 1024px) and (orientation: landscape) {
-    #viewer iframe {
-        width: 460px;
-        height: 415px;
-    }
 }
 /* For iPhone portrait layouts only */
 @media only screen and (max-device-width: 480px) and (orientation: portrait) {
-    #viewer {
-      width: 256px;
-      height: 432px;
-    }
-    #viewer iframe {
-       width: 256px;
-       height: 432px;
-    }
 }
 /* For iPhone landscape layouts only */
 @media only screen and (max-device-width: 480px) and (orientation: landscape) {
-    #viewer iframe {
-        width: 256px;
-        height: 124px;
-    }
 }
 
 [class^="icon-"]:before, [class*=" icon-"]:before {
