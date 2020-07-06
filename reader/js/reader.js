@@ -4199,6 +4199,29 @@ EPUBJS.reader.ReaderController = function(book) {
 				$next.addClass("disabled");
 			}
 		});
+
+		reader.rendition.hooks.content.register(function(contents) {
+			var el = contents.document.documentElement;
+
+			if (el) {
+
+				//Enable swipe gesture to flip a page
+				var start;
+				var end;
+
+				el.addEventListener('touchstart', function(event) {
+					start = event.changedTouches[0];
+				});
+
+				el.addEventListener('touchend', function(event) {
+					end = event.changedTouches[0];
+					var hr = (end.screenX - start.screenX) / window.innerWidth;
+					var vr = Math.abs((end.screenY - start.screenY) / window.innerHeight);
+					if (hr > 0.1 && vr < 0.2) return reader.rendition.prev();
+					if (hr < -0.1 && vr < 0.2) return reader.rendition.next();
+				});
+			}
+		});
 	});
 
 	return {
