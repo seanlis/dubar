@@ -1,9 +1,11 @@
-Epub.js Reader
+DuBar
 ================================
 
-![Demo](http://fchasen.com/futurepress/epubjs-reader_moby-dick.png)
+an epub reader
 
-[Try it while reading Moby Dick](http://futurepress.github.com/epubjs-reader/)
+![Demo](https://user-images.githubusercontent.com/7328445/86577718-3e148100-bfad-11ea-8d62-5fef68a5dd6f.png)
+
+[Try it here](https://seanlis.github.io/dubar)
 
 About the Reader
 -------------------------
@@ -14,11 +16,7 @@ About the Reader
 Getting Started
 -------------------------
 
-Open up [reader/index.html](http://futurepress.github.com/epubjs-reader/index.html) in a browser.
-
-You can change the ePub it opens by passing a link to bookPath in the url:
-
-`?bookPath=https://s3.amazonaws.com/epubjs/books/alice.epub`
+Open up [dubar](https://seanlis.github.io/dubar) in a browser, click the folder button to open an epub book.
 
 Running Locally
 -------------------------
@@ -34,7 +32,7 @@ npm install
 You can run the reader locally with the command
 
 ```javascript
-node start
+npm start
 ```
 
 Builds are concatenated and minified using [gruntjs](http://gruntjs.com/getting-started)
@@ -50,17 +48,6 @@ Or, to generate builds as you make changes run
 ```
 grunt watch
 ```
-
-Additional Resources
--------------------------
-
-[Epub.js Developer Mailing List](https://groups.google.com/forum/#!forum/epubjs)
-
-IRC Server: freenode.net Channel: #epub.js
-
-Follow us on twitter: @Epubjs
-
-+ http://twitter.com/#!/Epubjs
 
 Other
 -------------------------
