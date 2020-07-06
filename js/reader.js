@@ -3,24 +3,14 @@
  * @copyright Copyright (c) 2016 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.6.2
+ * @version   4.7.0+2254ba40
  */
 
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(factory((global.RSVP = global.RSVP || {})));
+	(factory((global.RSVP = {})));
 }(this, (function (exports) { 'use strict';
-
-function indexOf(callbacks, callback) {
-  for (var i = 0, l = callbacks.length; i < l; i++) {
-    if (callbacks[i] === callback) {
-      return i;
-    }
-  }
-
-  return -1;
-}
 
 function callbacksFor(object) {
   var callbacks = object._promiseCallbacks;
@@ -105,7 +95,7 @@ var EventTarget = {
       callbacks = allCallbacks[eventName] = [];
     }
 
-    if (indexOf(callbacks, callback) === -1) {
+    if (callbacks.indexOf(callback)) {
       callbacks.push(callback);
     }
   },
@@ -153,7 +143,7 @@ var EventTarget = {
 
     callbacks = allCallbacks[eventName];
 
-    index = indexOf(callbacks, callback);
+    index = callbacks.indexOf(callback);
 
     if (index !== -1) {
       callbacks.splice(index, 1);
@@ -216,40 +206,6 @@ function configure(name, value) {
   }
 }
 
-function objectOrFunction(x) {
-  var type = typeof x;
-  return x !== null && (type === 'object' || type === 'function');
-}
-
-function isFunction(x) {
-  return typeof x === 'function';
-}
-
-function isObject(x) {
-  return x !== null && typeof x === 'object';
-}
-
-function isMaybeThenable(x) {
-  return x !== null && typeof x === 'object';
-}
-
-var _isArray = void 0;
-if (Array.isArray) {
-  _isArray = Array.isArray;
-} else {
-  _isArray = function (x) {
-    return Object.prototype.toString.call(x) === '[object Array]';
-  };
-}
-
-var isArray = _isArray;
-
-// Date.now is not available in browsers < IE9
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/now#Compatibility
-var now = Date.now || function () {
-  return new Date().getTime();
-};
-
 var queue = [];
 
 function scheduleFlush() {
@@ -281,7 +237,7 @@ function instrument(eventName, promise, child) {
       detail: promise._result,
       childId: child && child._id,
       label: promise._label,
-      timeStamp: now(),
+      timeStamp: Date.now(),
       error: config["instrument-with-stack"] ? new Error(promise._label) : null
     } })) {
     scheduleFlush();
@@ -337,43 +293,57 @@ function withOwnPromise() {
   return new TypeError('A promises callback cannot return that same promise.');
 }
 
+function objectOrFunction(x) {
+  var type = typeof x;
+  return x !== null && (type === 'object' || type === 'function');
+}
+
 function noop() {}
 
 var PENDING = void 0;
 var FULFILLED = 1;
 var REJECTED = 2;
 
-var GET_THEN_ERROR = new ErrorObject();
+var TRY_CATCH_ERROR = { error: null };
 
 function getThen(promise) {
   try {
     return promise.then;
   } catch (error) {
-    GET_THEN_ERROR.error = error;
-    return GET_THEN_ERROR;
+    TRY_CATCH_ERROR.error = error;
+    return TRY_CATCH_ERROR;
   }
 }
 
-function tryThen(then$$1, value, fulfillmentHandler, rejectionHandler) {
+var tryCatchCallback = void 0;
+function tryCatcher() {
   try {
-    then$$1.call(value, fulfillmentHandler, rejectionHandler);
+    var target = tryCatchCallback;
+    tryCatchCallback = null;
+    return target.apply(this, arguments);
   } catch (e) {
-    return e;
+    TRY_CATCH_ERROR.error = e;
+    return TRY_CATCH_ERROR;
   }
+}
+
+function tryCatch(fn) {
+  tryCatchCallback = fn;
+  return tryCatcher;
 }
 
 function handleForeignThenable(promise, thenable, then$$1) {
   config.async(function (promise) {
     var sealed = false;
-    var error = tryThen(then$$1, thenable, function (value) {
+    var result = tryCatch(then$$1).call(thenable, function (value) {
       if (sealed) {
         return;
       }
       sealed = true;
-      if (thenable !== value) {
-        resolve(promise, value, undefined);
-      } else {
+      if (thenable === value) {
         fulfill(promise, value);
+      } else {
+        resolve(promise, value);
       }
     }, function (reason) {
       if (sealed) {
@@ -384,8 +354,10 @@ function handleForeignThenable(promise, thenable, then$$1) {
       reject(promise, reason);
     }, 'Settle: ' + (promise._label || ' unknown promise'));
 
-    if (!sealed && error) {
+    if (!sealed && result === TRY_CATCH_ERROR) {
       sealed = true;
+      var error = TRY_CATCH_ERROR.error;
+      TRY_CATCH_ERROR.error = null;
       reject(promise, error);
     }
   }, promise);
@@ -399,10 +371,10 @@ function handleOwnThenable(promise, thenable) {
     reject(promise, thenable._result);
   } else {
     subscribe(thenable, undefined, function (value) {
-      if (thenable !== value) {
-        resolve(promise, value, undefined);
-      } else {
+      if (thenable === value) {
         fulfill(promise, value);
+      } else {
+        resolve(promise, value);
       }
     }, function (reason) {
       return reject(promise, reason);
@@ -415,10 +387,11 @@ function handleMaybeThenable(promise, maybeThenable, then$$1) {
 
   if (isOwnThenable) {
     handleOwnThenable(promise, maybeThenable);
-  } else if (then$$1 === GET_THEN_ERROR) {
-    reject(promise, GET_THEN_ERROR.error);
-    GET_THEN_ERROR.error = null;
-  } else if (isFunction(then$$1)) {
+  } else if (then$$1 === TRY_CATCH_ERROR) {
+    var error = TRY_CATCH_ERROR.error;
+    TRY_CATCH_ERROR.error = null;
+    reject(promise, error);
+  } else if (typeof then$$1 === 'function') {
     handleForeignThenable(promise, maybeThenable, then$$1);
   } else {
     fulfill(promise, maybeThenable);
@@ -514,46 +487,26 @@ function publish(promise) {
   promise._subscribers.length = 0;
 }
 
-function ErrorObject() {
-  this.error = null;
-}
-
-var TRY_CATCH_ERROR = new ErrorObject();
-
-function tryCatch(callback, result) {
-  try {
-    return callback(result);
-  } catch (e) {
-    TRY_CATCH_ERROR.error = e;
-    return TRY_CATCH_ERROR;
-  }
-}
-
 function invokeCallback(state, promise, callback, result) {
-  var hasCallback = isFunction(callback);
-  var value = void 0,
-      error = void 0;
+  var hasCallback = typeof callback === 'function';
+  var value = void 0;
 
   if (hasCallback) {
-    value = tryCatch(callback, result);
-
-    if (value === TRY_CATCH_ERROR) {
-      error = value.error;
-      value.error = null; // release
-    } else if (value === promise) {
-      reject(promise, withOwnPromise());
-      return;
-    }
+    value = tryCatch(callback)(result);
   } else {
     value = result;
   }
 
   if (promise._state !== PENDING) {
     // noop
-  } else if (hasCallback && error === undefined) {
-    resolve(promise, value);
-  } else if (error !== undefined) {
+  } else if (value === promise) {
+    reject(promise, withOwnPromise());
+  } else if (value === TRY_CATCH_ERROR) {
+    var error = TRY_CATCH_ERROR.error;
+    TRY_CATCH_ERROR.error = null; // release
     reject(promise, error);
+  } else if (hasCallback) {
+    resolve(promise, value);
   } else if (state === FULFILLED) {
     fulfill(promise, value);
   } else if (state === REJECTED) {
@@ -615,6 +568,8 @@ var Enumerator = function () {
     this._instanceConstructor = Constructor;
     this.promise = new Constructor(noop, label);
     this._abortOnReject = abortOnReject;
+    this._isUsingOwnPromise = Constructor === Promise;
+    this._isUsingOwnResolve = Constructor.resolve === resolve$1;
 
     this._init.apply(this, arguments);
   }
@@ -626,9 +581,6 @@ var Enumerator = function () {
     this._result = new Array(len);
 
     this._enumerate(input);
-    if (this._remaining === 0) {
-      fulfill(this.promise, this._result);
-    }
   };
 
   Enumerator.prototype._enumerate = function _enumerate(input) {
@@ -636,87 +588,91 @@ var Enumerator = function () {
     var promise = this.promise;
 
     for (var i = 0; promise._state === PENDING && i < length; i++) {
-      this._eachEntry(input[i], i);
+      this._eachEntry(input[i], i, true);
+    }
+
+    this._checkFullfillment();
+  };
+
+  Enumerator.prototype._checkFullfillment = function _checkFullfillment() {
+    if (this._remaining === 0) {
+      fulfill(this.promise, this._result);
     }
   };
 
-  Enumerator.prototype._settleMaybeThenable = function _settleMaybeThenable(entry, i) {
+  Enumerator.prototype._settleMaybeThenable = function _settleMaybeThenable(entry, i, firstPass) {
     var c = this._instanceConstructor;
-    var resolve$$1 = c.resolve;
 
-    if (resolve$$1 === resolve$1) {
+    if (this._isUsingOwnResolve) {
       var then$$1 = getThen(entry);
 
       if (then$$1 === then && entry._state !== PENDING) {
         entry._onError = null;
-        this._settledAt(entry._state, i, entry._result);
+        this._settledAt(entry._state, i, entry._result, firstPass);
       } else if (typeof then$$1 !== 'function') {
-        this._remaining--;
-        this._result[i] = this._makeResult(FULFILLED, i, entry);
-      } else if (c === Promise) {
+        this._settledAt(FULFILLED, i, entry, firstPass);
+      } else if (this._isUsingOwnPromise) {
         var promise = new c(noop);
         handleMaybeThenable(promise, entry, then$$1);
-        this._willSettleAt(promise, i);
+        this._willSettleAt(promise, i, firstPass);
       } else {
         this._willSettleAt(new c(function (resolve$$1) {
           return resolve$$1(entry);
-        }), i);
+        }), i, firstPass);
       }
     } else {
-      this._willSettleAt(resolve$$1(entry), i);
+      this._willSettleAt(c.resolve(entry), i, firstPass);
     }
   };
 
-  Enumerator.prototype._eachEntry = function _eachEntry(entry, i) {
-    if (isMaybeThenable(entry)) {
-      this._settleMaybeThenable(entry, i);
+  Enumerator.prototype._eachEntry = function _eachEntry(entry, i, firstPass) {
+    if (entry !== null && typeof entry === 'object') {
+      this._settleMaybeThenable(entry, i, firstPass);
     } else {
-      this._remaining--;
-      this._result[i] = this._makeResult(FULFILLED, i, entry);
+      this._setResultAt(FULFILLED, i, entry, firstPass);
     }
   };
 
-  Enumerator.prototype._settledAt = function _settledAt(state, i, value) {
+  Enumerator.prototype._settledAt = function _settledAt(state, i, value, firstPass) {
     var promise = this.promise;
 
     if (promise._state === PENDING) {
       if (this._abortOnReject && state === REJECTED) {
         reject(promise, value);
       } else {
-        this._remaining--;
-        this._result[i] = this._makeResult(state, i, value);
-        if (this._remaining === 0) {
-          fulfill(promise, this._result);
-        }
+        this._setResultAt(state, i, value, firstPass);
+        this._checkFullfillment();
       }
     }
   };
 
-  Enumerator.prototype._makeResult = function _makeResult(state, i, value) {
-    return value;
+  Enumerator.prototype._setResultAt = function _setResultAt(state, i, value, firstPass) {
+    this._remaining--;
+    this._result[i] = value;
   };
 
-  Enumerator.prototype._willSettleAt = function _willSettleAt(promise, i) {
-    var enumerator = this;
+  Enumerator.prototype._willSettleAt = function _willSettleAt(promise, i, firstPass) {
+    var _this = this;
 
     subscribe(promise, undefined, function (value) {
-      return enumerator._settledAt(FULFILLED, i, value);
+      return _this._settledAt(FULFILLED, i, value, firstPass);
     }, function (reason) {
-      return enumerator._settledAt(REJECTED, i, reason);
+      return _this._settledAt(REJECTED, i, reason, firstPass);
     });
   };
 
   return Enumerator;
 }();
 
-function makeSettledResult(state, position, value) {
+function setSettledResult(state, i, value) {
+  this._remaining--;
   if (state === FULFILLED) {
-    return {
+    this._result[i] = {
       state: 'fulfilled',
       value: value
     };
   } else {
-    return {
+    this._result[i] = {
       state: 'rejected',
       reason: value
     };
@@ -771,7 +727,7 @@ function makeSettledResult(state, position, value) {
   @static
 */
 function all(entries, label) {
-  if (!isArray(entries)) {
+  if (!Array.isArray(entries)) {
     return this.reject(new TypeError("Promise.all must be called with an array"), label);
   }
   return new Enumerator(this, entries, true /* abort on reject */, label).promise;
@@ -849,7 +805,7 @@ function race(entries, label) {
 
   var promise = new Constructor(noop, label);
 
-  if (!isArray(entries)) {
+  if (!Array.isArray(entries)) {
     reject(promise, new TypeError('Promise.race must be called with an array'));
     return promise;
   }
@@ -908,7 +864,7 @@ function reject$1(reason, label) {
   return promise;
 }
 
-var guidKey = 'rsvp_' + now() + '-';
+var guidKey = 'rsvp_' + Date.now() + '-';
 var counter = 0;
 
 function needsResolver() {
@@ -1144,9 +1100,6 @@ var Promise = function () {
   return Promise;
 }();
 
-
-
-Promise.cast = resolve$1; // deprecated
 Promise.all = all;
 Promise.race = race;
 Promise.resolve = resolve$1;
@@ -1350,31 +1303,6 @@ Promise.prototype._guidKey = guidKey;
 */
 Promise.prototype.then = then;
 
-function Result() {
-  this.value = undefined;
-}
-
-var ERROR = new Result();
-var GET_THEN_ERROR$1 = new Result();
-
-function getThen$1(obj) {
-  try {
-    return obj.then;
-  } catch (error) {
-    ERROR.value = error;
-    return ERROR;
-  }
-}
-
-function tryApply(f, s, a) {
-  try {
-    f.apply(s, a);
-  } catch (error) {
-    ERROR.value = error;
-    return ERROR;
-  }
-}
-
 function makeObject(_, argumentNames) {
   var obj = {};
   var length = _.length;
@@ -1541,7 +1469,6 @@ function wrapThenable(then, promise) {
 */
 function denodeify(nodeFunc, options) {
   var fn = function () {
-    var self = this;
     var l = arguments.length;
     var args = new Array(l + 1);
     var promiseInput = false;
@@ -1552,9 +1479,11 @@ function denodeify(nodeFunc, options) {
       if (!promiseInput) {
         // TODO: clean this up
         promiseInput = needsPromiseInput(arg);
-        if (promiseInput === GET_THEN_ERROR$1) {
+        if (promiseInput === TRY_CATCH_ERROR) {
+          var error = TRY_CATCH_ERROR.error;
+          TRY_CATCH_ERROR.error = null;
           var p = new Promise(noop);
-          reject(p, GET_THEN_ERROR$1.value);
+          reject(p, error);
           return p;
         } else if (promiseInput && promiseInput !== true) {
           arg = wrapThenable(promiseInput, arg);
@@ -1566,13 +1495,23 @@ function denodeify(nodeFunc, options) {
     var promise = new Promise(noop);
 
     args[l] = function (err, val) {
-      if (err) reject(promise, err);else if (options === undefined) resolve(promise, val);else if (options === true) resolve(promise, arrayResult(arguments));else if (isArray(options)) resolve(promise, makeObject(arguments, options));else resolve(promise, val);
+      if (err) {
+        reject(promise, err);
+      } else if (options === undefined) {
+        resolve(promise, val);
+      } else if (options === true) {
+        resolve(promise, arrayResult(arguments));
+      } else if (Array.isArray(options)) {
+        resolve(promise, makeObject(arguments, options));
+      } else {
+        resolve(promise, val);
+      }
     };
 
     if (promiseInput) {
-      return handlePromiseInput(promise, args, nodeFunc, self);
+      return handlePromiseInput(promise, args, nodeFunc, this);
     } else {
-      return handleValueInput(promise, args, nodeFunc, self);
+      return handleValueInput(promise, args, nodeFunc, this);
     }
   };
 
@@ -1582,29 +1521,27 @@ function denodeify(nodeFunc, options) {
 }
 
 function handleValueInput(promise, args, nodeFunc, self) {
-  var result = tryApply(nodeFunc, self, args);
-  if (result === ERROR) {
-    reject(promise, result.value);
+  var result = tryCatch(nodeFunc).apply(self, args);
+  if (result === TRY_CATCH_ERROR) {
+    var error = TRY_CATCH_ERROR.error;
+    TRY_CATCH_ERROR.error = null;
+    reject(promise, error);
   }
   return promise;
 }
 
 function handlePromiseInput(promise, args, nodeFunc, self) {
   return Promise.all(args).then(function (args) {
-    var result = tryApply(nodeFunc, self, args);
-    if (result === ERROR) {
-      reject(promise, result.value);
-    }
-    return promise;
+    return handleValueInput(promise, args, nodeFunc, self);
   });
 }
 
 function needsPromiseInput(arg) {
-  if (arg && typeof arg === 'object') {
+  if (arg !== null && typeof arg === 'object') {
     if (arg.constructor === Promise) {
       return true;
     } else {
-      return getThen$1(arg);
+      return getThen(arg);
     }
   } else {
     return false;
@@ -1639,7 +1576,7 @@ var AllSettled = function (_Enumerator) {
   return AllSettled;
 }(Enumerator);
 
-AllSettled.prototype._makeResult = makeSettledResult;
+AllSettled.prototype._setResultAt = setSettledResult;
 
 /**
 `RSVP.allSettled` is similar to `RSVP.all`, but instead of implementing
@@ -1687,7 +1624,7 @@ states of the constituent promises.
 */
 
 function allSettled(entries, label) {
-  if (!isArray(entries)) {
+  if (!Array.isArray(entries)) {
     return Promise.reject(new TypeError("Promise.allSettled must be called with an array"), label);
   }
 
@@ -1847,7 +1784,7 @@ var PromiseHash = function (_Enumerator) {
   have been fulfilled, or rejected if any of them become rejected.
 */
 function hash(object, label) {
-  if (!isObject(object)) {
+  if (object === null || typeof object !== 'object') {
     return Promise.reject(new TypeError("Promise.hash must be called with an object"), label);
   }
 
@@ -1868,7 +1805,7 @@ var HashSettled = function (_PromiseHash) {
   return HashSettled;
 }(PromiseHash);
 
-HashSettled.prototype._makeResult = makeSettledResult;
+HashSettled.prototype._setResultAt = setSettledResult;
 
 /**
   `RSVP.hashSettled` is similar to `RSVP.allSettled`, but takes an object
@@ -1973,7 +1910,7 @@ HashSettled.prototype._makeResult = makeSettledResult;
 */
 
 function hashSettled(object, label) {
-  if (!isObject(object)) {
+  if (object === null || typeof object !== 'object') {
     return Promise.reject(new TypeError("RSVP.hashSettled must be called with an object"), label);
   }
 
@@ -2071,12 +2008,49 @@ function defer(label) {
   return deferred;
 }
 
+function _possibleConstructorReturn$3(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits$3(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var MapEnumerator = function (_Enumerator) {
+  _inherits$3(MapEnumerator, _Enumerator);
+
+  function MapEnumerator(Constructor, entries, mapFn, label) {
+    return _possibleConstructorReturn$3(this, _Enumerator.call(this, Constructor, entries, true, label, mapFn));
+  }
+
+  MapEnumerator.prototype._init = function _init(Constructor, input, bool, label, mapFn) {
+    var len = input.length || 0;
+    this.length = len;
+    this._remaining = len;
+    this._result = new Array(len);
+    this._mapFn = mapFn;
+
+    this._enumerate(input);
+  };
+
+  MapEnumerator.prototype._setResultAt = function _setResultAt(state, i, value, firstPass) {
+    if (firstPass) {
+      var val = tryCatch(this._mapFn)(value, i);
+      if (val === TRY_CATCH_ERROR) {
+        this._settledAt(REJECTED, i, val.error, false);
+      } else {
+        this._eachEntry(val, i, false);
+      }
+    } else {
+      this._remaining--;
+      this._result[i] = value;
+    }
+  };
+
+  return MapEnumerator;
+}(Enumerator);
+
 /**
- `RSVP.map` is similar to JavaScript's native `map` method, except that it
-  waits for all promises to become fulfilled before running the `mapFn` on
-  each item in given to `promises`. `RSVP.map` returns a promise that will
-  become fulfilled with the result of running `mapFn` on the values the promises
-  become fulfilled with.
+ `RSVP.map` is similar to JavaScript's native `map` method. `mapFn` is eagerly called
+  meaning that as soon as any promise resolves its value will be passed to `mapFn`.
+  `RSVP.map` returns a promise that will become fulfilled with the result of running
+  `mapFn` on the values the promises become fulfilled with.
 
   For example:
 
@@ -2149,25 +2123,18 @@ function defer(label) {
    The promise will be rejected if any of the given `promises` become rejected.
   @static
 */
+
+
 function map(promises, mapFn, label) {
-  if (!isArray(promises)) {
+  if (!Array.isArray(promises)) {
     return Promise.reject(new TypeError("RSVP.map must be called with an array"), label);
   }
 
-  if (!isFunction(mapFn)) {
+  if (typeof mapFn !== 'function') {
     return Promise.reject(new TypeError("RSVP.map expects a function as a second argument"), label);
   }
 
-  return Promise.all(promises, label).then(function (values) {
-    var length = values.length;
-    var results = new Array(length);
-
-    for (var i = 0; i < length; i++) {
-      results[i] = mapFn(values[i]);
-    }
-
-    return Promise.all(results, label);
-  });
+  return new MapEnumerator(Promise, promises, mapFn, label).promise;
 }
 
 /**
@@ -2201,12 +2168,65 @@ function reject$2(reason, label) {
   return Promise.reject(reason, label);
 }
 
+function _possibleConstructorReturn$4(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits$4(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var EMPTY_OBJECT = {};
+
+var FilterEnumerator = function (_Enumerator) {
+  _inherits$4(FilterEnumerator, _Enumerator);
+
+  function FilterEnumerator(Constructor, entries, filterFn, label) {
+    return _possibleConstructorReturn$4(this, _Enumerator.call(this, Constructor, entries, true, label, filterFn));
+  }
+
+  FilterEnumerator.prototype._init = function _init(Constructor, input, bool, label, filterFn) {
+    var len = input.length || 0;
+    this.length = len;
+    this._remaining = len;
+
+    this._result = new Array(len);
+    this._filterFn = filterFn;
+
+    this._enumerate(input);
+  };
+
+  FilterEnumerator.prototype._checkFullfillment = function _checkFullfillment() {
+    if (this._remaining === 0) {
+      this._result = this._result.filter(function (val) {
+        return val !== EMPTY_OBJECT;
+      });
+      fulfill(this.promise, this._result);
+    }
+  };
+
+  FilterEnumerator.prototype._setResultAt = function _setResultAt(state, i, value, firstPass) {
+    if (firstPass) {
+      this._result[i] = value;
+      var val = tryCatch(this._filterFn)(value, i);
+      if (val === TRY_CATCH_ERROR) {
+        this._settledAt(REJECTED, i, val.error, false);
+      } else {
+        this._eachEntry(val, i, false);
+      }
+    } else {
+      this._remaining--;
+      if (!value) {
+        this._result[i] = EMPTY_OBJECT;
+      }
+    }
+  };
+
+  return FilterEnumerator;
+}(Enumerator);
+
 /**
- `RSVP.filter` is similar to JavaScript's native `filter` method, except that it
-  waits for all promises to become fulfilled before running the `filterFn` on
-  each item in given to `promises`. `RSVP.filter` returns a promise that will
-  become fulfilled with the result of running `filterFn` on the values the
-  promises become fulfilled with.
+ `RSVP.filter` is similar to JavaScript's native `filter` method.
+ `filterFn` is eagerly called meaning that as soon as any promise
+  resolves its value will be passed to `filterFn`. `RSVP.filter` returns
+  a promise that will become fulfilled with the result of running
+  `filterFn` on the values the promises become fulfilled with.
 
   For example:
 
@@ -2287,49 +2307,16 @@ function reject$2(reason, label) {
   @return {Promise}
 */
 
-function resolveAll(promises, label) {
-  return Promise.all(promises, label);
-}
-
-function resolveSingle(promise, label) {
-  return Promise.resolve(promise, label).then(function (promises) {
-    return resolveAll(promises, label);
-  });
-}
-
 function filter(promises, filterFn, label) {
-  if (!isArray(promises) && !(isObject(promises) && promises.then !== undefined)) {
-    return Promise.reject(new TypeError("RSVP.filter must be called with an array or promise"), label);
-  }
-
-  if (!isFunction(filterFn)) {
+  if (typeof filterFn !== 'function') {
     return Promise.reject(new TypeError("RSVP.filter expects function as a second argument"), label);
   }
 
-  var promise = isArray(promises) ? resolveAll(promises, label) : resolveSingle(promises, label);
-  return promise.then(function (values) {
-    var length = values.length;
-    var filtered = new Array(length);
-
-    for (var i = 0; i < length; i++) {
-      filtered[i] = filterFn(values[i]);
+  return Promise.resolve(promises, label).then(function (promises) {
+    if (!Array.isArray(promises)) {
+      throw new TypeError("RSVP.filter must be called with an array");
     }
-
-    return resolveAll(filtered, label).then(function (filtered) {
-      var results = new Array(length);
-      var newLength = 0;
-
-      for (var _i = 0; _i < length; _i++) {
-        if (filtered[_i]) {
-          results[newLength] = values[_i];
-          newLength++;
-        }
-      }
-
-      results.length = newLength;
-
-      return results;
-    });
+    return new FilterEnumerator(Promise, promises, filterFn, label).promise;
   });
 }
 
@@ -2446,20 +2433,7 @@ if (isNode) {
   scheduleFlush$1 = useSetTimeout();
 }
 
-var platform = void 0;
-
-/* global self */
-if (typeof self === 'object') {
-  platform = self;
-
-  /* global global */
-} else if (typeof global === 'object') {
-  platform = global;
-} else {
-  throw new Error('no global: `self` or `global` found');
-}
-
-var _asap$cast$Promise$Ev;
+var _asap$Promise$EventTa;
 
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 
@@ -2468,7 +2442,6 @@ config.async = asap;
 config.after = function (cb) {
   return setTimeout(cb, 0);
 };
-var cast = resolve$2;
 
 var async = function (callback, arg) {
   return config.async(callback, arg);
@@ -2495,9 +2468,8 @@ if (typeof window !== 'undefined' && typeof window['__PROMISE_INSTRUMENTATION__'
 
 // the default export here is for backwards compat:
 //   https://github.com/tildeio/rsvp.js/issues/434
-var rsvp = (_asap$cast$Promise$Ev = {
+var rsvp = (_asap$Promise$EventTa = {
   asap: asap,
-  cast: cast,
   Promise: Promise,
   EventTarget: EventTarget,
   all: all$1,
@@ -2514,11 +2486,10 @@ var rsvp = (_asap$cast$Promise$Ev = {
   resolve: resolve$2,
   reject: reject$2,
   map: map
-}, _defineProperty(_asap$cast$Promise$Ev, 'async', async), _defineProperty(_asap$cast$Promise$Ev, 'filter', filter), _asap$cast$Promise$Ev);
+}, _defineProperty(_asap$Promise$EventTa, 'async', async), _defineProperty(_asap$Promise$EventTa, 'filter', filter), _asap$Promise$EventTa);
 
 exports['default'] = rsvp;
 exports.asap = asap;
-exports.cast = cast;
 exports.Promise = Promise;
 exports.EventTarget = EventTarget;
 exports.all = all$1;
@@ -2541,6 +2512,10 @@ exports.filter = filter;
 Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
+
+
+
+
 
 //
 
@@ -3227,7 +3202,6 @@ EPUBJS.Reader = function(bookPath, _options) {
 	var reader = this;
 	var book;
 	var plugin;
-	var $viewer = $("#viewer");
 	var search = window.location.search;
 	var parameters;
 
@@ -3256,63 +3230,15 @@ EPUBJS.Reader = function(bookPath, _options) {
 		});
 	}
 
-	this.setBookKey(this.settings.bookPath); //-- This could be username + path or any unique string
+	this.boundHashChanged = this.hashChanged.bind(this);
+	this.boundAdjustFontSize = this.adjustFontSize.bind(this);
 
-	if(this.settings.restore && this.isSaved()) {
-		this.applySavedSettings();
-	}
-
-	this.settings.styles = this.settings.styles || {
-		fontSize : "100%"
-	};
-
-	this.book = book = new ePub(this.settings.bookPath, this.settings);
-
-	this.offline = false;
-	this.sidebarOpen = false;
-	if(!this.settings.bookmarks) {
-		this.settings.bookmarks = [];
-	}
-
-	if(!this.settings.annotations) {
-		this.settings.annotations = [];
-	}
-
-	if(this.settings.generatePagination) {
-		book.generatePagination($viewer.width(), $viewer.height());
-	}
-
-	this.rendition = book.renderTo("viewer", {
-		ignoreClass: "annotator-hl",
-		width: "100%",
-		height: "100%"
-	});
-
-	if(this.settings.previousLocationCfi) {
-		this.displayed = this.rendition.display(this.settings.previousLocationCfi);
-	} else {
-		this.displayed = this.rendition.display();
-	}
-
-	book.ready.then(function () {
-		reader.ReaderController = EPUBJS.reader.ReaderController.call(reader, book);
-		reader.SettingsController = EPUBJS.reader.SettingsController.call(reader, book);
-		reader.ControlsController = EPUBJS.reader.ControlsController.call(reader, book);
-		reader.SidebarController = EPUBJS.reader.SidebarController.call(reader, book);
-		reader.BookmarksController = EPUBJS.reader.BookmarksController.call(reader, book);
-		reader.NotesController = EPUBJS.reader.NotesController.call(reader, book);
-
-		window.addEventListener("hashchange", this.hashChanged.bind(this), false);
-
-		document.addEventListener('keydown', this.adjustFontSize.bind(this), false);
-
-		this.rendition.on("keydown", this.adjustFontSize.bind(this));
-		this.rendition.on("keydown", reader.ReaderController.arrowKeys.bind(this));
-
-		this.rendition.on("selected", this.selectedRange.bind(this));
-	}.bind(this)).then(function() {
-		reader.ReaderController.hideLoader();
-	}.bind(this));
+	reader.ReaderController = EPUBJS.reader.ReaderController.call(reader, book);
+	reader.SettingsController = EPUBJS.reader.SettingsController.call(reader, book);
+	reader.ControlsController = EPUBJS.reader.ControlsController.call(reader, book);
+	reader.SidebarController = EPUBJS.reader.SidebarController.call(reader, book);
+	reader.BookmarksController = EPUBJS.reader.BookmarksController.call(reader, book);
+//	reader.NotesController = EPUBJS.reader.NotesController.call(reader, book);
 
 	// Call Plugins
 	for(plugin in EPUBJS.reader.plugins) {
@@ -3321,18 +3247,110 @@ EPUBJS.Reader = function(bookPath, _options) {
 		}
 	}
 
-	book.loaded.metadata.then(function(meta) {
-		reader.MetaController = EPUBJS.reader.MetaController.call(reader, meta);
-	});
-
-	book.loaded.navigation.then(function(navigation) {
-		reader.TocController = EPUBJS.reader.TocController.call(reader, navigation);
-	});
+	reader.TocController = EPUBJS.reader.TocController.call(reader);
 
 	window.addEventListener("beforeunload", this.unload.bind(this), false);
 
 	return this;
 };
+
+EPUBJS.Reader.prototype.openBookFromFile = function(file) {
+	var closeBook = function () {
+		if (this.book) {
+			this.unload();
+			this.book.destroy();
+		}
+
+		this.settings.bookPath = undefined;
+		this.settings.bookmarks = undefined;
+		this.settings.annotations = undefined;
+		this.settings.contained = undefined;
+		this.settings.bookKey = undefined;
+		this.settings.styles = undefined;
+		delete this.settings.previousLocationCfi;
+	}
+
+	var openBook = function (e) {
+		var reader = this;
+		var book;
+		var $viewer = $("#viewer");
+
+		this.settings.bookPath = file.name;
+		var hash = sha256(e.target.result);
+		this.setBookKey('sha256:' + hash);
+
+		if(this.settings.restore && this.isSaved()) {
+			this.applySavedSettings();
+		}
+
+		this.settings.styles = this.settings.styles || {
+			fontSize : "100%"
+		};
+
+		this.book = book = new ePub(undefined, this.settings);
+		var bookData = e.target.result;
+		this.book.open(bookData);
+
+		this.offline = false;
+		this.sidebarOpen = false;
+		if(!this.settings.bookmarks) {
+			this.settings.bookmarks = [];
+		}
+
+		if(!this.settings.annotations) {
+			this.settings.annotations = [];
+		}
+
+		if(this.settings.generatePagination) {
+			book.generatePagination($viewer.width(), $viewer.height());
+		}
+
+		this.rendition = book.renderTo("viewer", {
+			ignoreClass: "annotator-hl",
+			width: "100%",
+			height: "100%"
+		});
+
+		if(this.settings.previousLocationCfi) {
+			this.displayed = this.rendition.display(this.settings.previousLocationCfi);
+		} else {
+			this.displayed = this.rendition.display();
+		}
+
+		book.ready.then(function () {
+			this.trigger("reader:bookready");
+
+			window.addEventListener("hashchange", this.boundHashChanged, false);
+
+			document.addEventListener('keydown', this.boundAdjustFontSize, false);
+
+			this.rendition.on("keydown", this.adjustFontSize.bind(this));
+			this.rendition.on("keydown", reader.ReaderController.arrowKeys.bind(this));
+
+			//this.rendition.on("selected", this.selectedRange.bind(this));
+		}.bind(this)).then(function() {
+			this.ReaderController.hideLoader();
+		}.bind(this));
+
+		book.loaded.metadata.then(function(meta) {
+			reader.MetaController = EPUBJS.reader.MetaController.call(reader, meta);
+		});
+
+		book.loaded.navigation.then(function(navigation) {
+			reader.trigger("reader:bookloaded", navigation);
+		});
+
+	};
+
+	closeBook.bind(this)();
+	this.ReaderController.showLoader();
+
+	if (window.FileReader) {
+		var filereader = new FileReader();
+		filereader.onload = openBook.bind(this);
+		filereader.readAsArrayBuffer(file);
+	}
+}
 
 EPUBJS.Reader.prototype.adjustFontSize = function(e) {
 	var fontSize;
@@ -3429,7 +3447,7 @@ EPUBJS.Reader.prototype.clearNotes = function() {
 //-- Settings
 EPUBJS.Reader.prototype.setBookKey = function(identifier){
 	if(!this.settings.bookKey) {
-		this.settings.bookKey = "epubjsreader:" + EPUBJS.VERSION + ":" + window.location.host + ":" + identifier;
+		this.settings.bookKey = identifier;
 	}
 	return this.settings.bookKey;
 };
@@ -3526,13 +3544,9 @@ RSVP.EventTarget.mixin(EPUBJS.Reader.prototype);
 
 EPUBJS.reader.BookmarksController = function() {
 	var reader = this;
-	var book = this.book;
-	var rendition = this.rendition;
 
 	var $bookmarks = $("#bookmarksView"),
 			$list = $bookmarks.find("#bookmarks");
-
-	var docfrag = document.createDocumentFragment();
 
 	var show = function() {
 		$bookmarks.show();
@@ -3551,10 +3565,10 @@ EPUBJS.reader.BookmarksController = function() {
 		listitem.id = "bookmark-"+counter;
 		listitem.classList.add('list_item');
 
-		var spineItem = book.spine.get(cfi);
+		var spineItem = reader.book.spine.get(cfi);
 		var tocItem;
-		if (spineItem.index in book.navigation.toc) {
-			tocItem = book.navigation.toc[spineItem.index];
+		if (spineItem.index in reader.book.navigation.toc) {
+			tocItem = reader.book.navigation.toc[spineItem.index];
 			link.textContent = tocItem.label;
 		} else {
 			link.textContent = cfi;
@@ -3566,7 +3580,7 @@ EPUBJS.reader.BookmarksController = function() {
 
 		link.addEventListener("click", function(event){
 				var cfi = this.getAttribute('href');
-				rendition.display(cfi);
+				reader.rendition.display(cfi);
 				event.preventDefault();
 		}, false);
 
@@ -3577,12 +3591,19 @@ EPUBJS.reader.BookmarksController = function() {
 		return listitem;
 	};
 
-	this.settings.bookmarks.forEach(function(cfi) {
-		var bookmark = createBookmarkItem(cfi);
-		docfrag.appendChild(bookmark);
-	});
+	this.on("reader:bookready", function() {
+		$list.empty();
 
-	$list.append(docfrag);
+		var docfrag = document.createDocumentFragment();
+
+		counter = 0;
+		reader.settings.bookmarks.forEach(function(cfi) {
+			var bookmark = createBookmarkItem(cfi);
+			docfrag.appendChild(bookmark);
+		});
+
+		$list.append(docfrag);
+	});
 
 	this.on("reader:bookmarked", function(cfi) {
 		var item = createBookmarkItem(cfi);
@@ -3602,7 +3623,6 @@ EPUBJS.reader.BookmarksController = function() {
 
 EPUBJS.reader.ControlsController = function(book) {
 	var reader = this;
-	var rendition = this.rendition;
 
 	var $store = $("#store"),
 			$fullscreen = $("#fullscreen"),
@@ -3612,7 +3632,8 @@ EPUBJS.reader.ControlsController = function(book) {
 			$main = $("#main"),
 			$sidebar = $("#sidebar"),
 			$settings = $("#setting"),
-			$bookmark = $("#bookmark");
+			$bookmark = $("#bookmark"),
+			$openfile = $("#open");
 	/*
 	var goOnline = function() {
 		reader.offline = false;
@@ -3661,6 +3682,13 @@ EPUBJS.reader.ControlsController = function(book) {
 		}
 	}
 
+	$openfile.on("change", function(e) {
+		if(e.target.files.length > 0) {
+			var file = e.target.files[0];
+			reader.openBookFromFile(file);
+		}
+	});
+
 	$settings.on("click", function() {
 		reader.SettingsController.show();
 	});
@@ -3683,29 +3711,35 @@ EPUBJS.reader.ControlsController = function(book) {
 
 	});
 
-	rendition.on('relocated', function(location){
-		var cfi = location.start.cfi;
-		var cfiFragment = "#" + cfi;
-		//-- Check if bookmarked
-		var bookmarked = reader.isBookmarked(cfi);
-		if(bookmarked === -1) { //-- Not bookmarked
-			$bookmark
-				.removeClass("icon-bookmark")
-				.addClass("icon-bookmark-empty");
-		} else { //-- Bookmarked
-			$bookmark
-				.addClass("icon-bookmark")
-				.removeClass("icon-bookmark-empty");
-		}
 
-		reader.currentLocationCfi = cfi;
+	this.on("reader:bookready", function () {
+		reader.rendition.on('relocated', function(location){
+			var cfi = location.start.cfi;
+			var cfiFragment = "#" + cfi;
+			//-- Check if bookmarked
+			var bookmarked = reader.isBookmarked(cfi);
+			if(bookmarked === -1) { //-- Not bookmarked
+				$bookmark
+					.removeClass("icon-bookmark")
+					.addClass("icon-bookmark-empty");
+			} else { //-- Bookmarked
+				$bookmark
+					.addClass("icon-bookmark")
+					.removeClass("icon-bookmark-empty");
+			}
 
-		// Update the History Location
-		if(reader.settings.history &&
+			reader.currentLocationCfi = cfi;
+
+			// Update the History Location
+			if(reader.settings.history &&
 				window.location.hash != cfiFragment) {
-			// Add CFI fragment to the history
-			history.pushState({}, '', cfiFragment);
-		}
+				// Add CFI fragment to the history
+				history.pushState({}, '', cfiFragment);
+			}
+		});
+
+		$bookmark.removeClass("hidden-icon");
+		$slider.removeClass("hidden-icon");
 	});
 
 	return {
@@ -4022,16 +4056,17 @@ EPUBJS.reader.ReaderController = function(book) {
 			$divider = $("#divider"),
 			$loader = $("#loader"),
 			$next = $("#next"),
-			$prev = $("#prev");
+			$prev = $("#prev"),
+			$arrows = $(".arrow");
 	var reader = this;
 	var book = this.book;
 	var rendition = this.rendition;
 	var slideIn = function() {
-		var currentPosition = rendition.currentLocation().start.cfi;
+		var currentPosition = reader.rendition.currentLocation().start.cfi;
 		if (reader.settings.sidebarReflow){
 			$main.removeClass('single');
 			$main.one("transitionend", function(){
-				rendition.resize();
+				reader.rendition.resize();
 			});
 		} else {
 			$main.removeClass("closed");
@@ -4039,7 +4074,7 @@ EPUBJS.reader.ReaderController = function(book) {
 	};
 
 	var slideOut = function() {
-		var location = rendition.currentLocation();
+		var location = reader.rendition.currentLocation();
 		if (!location) {
 			return;
 		}
@@ -4047,7 +4082,7 @@ EPUBJS.reader.ReaderController = function(book) {
 		if (reader.settings.sidebarReflow){
 			$main.addClass('single');
 			$main.one("transitionend", function(){
-				rendition.resize();
+				reader.rendition.resize();
 			});
 		} else {
 			$main.addClass("closed");
@@ -4079,12 +4114,16 @@ EPUBJS.reader.ReaderController = function(book) {
 	var keylock = false;
 
 	var arrowKeys = function(e) {
+		if(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+			return;
+		}
+
 		if(e.keyCode == 37) {
 
-			if(book.package.metadata.direction === "rtl") {
-				rendition.next();
+			if(reader.book.package.metadata.direction === "rtl") {
+				reader.rendition.next();
 			} else {
-				rendition.prev();
+				reader.rendition.prev();
 			}
 
 			$prev.addClass("active");
@@ -4099,10 +4138,10 @@ EPUBJS.reader.ReaderController = function(book) {
 		}
 		if(e.keyCode == 39) {
 
-			if(book.package.metadata.direction === "rtl") {
-				rendition.prev();
+			if(reader.book.package.metadata.direction === "rtl") {
+				reader.rendition.prev();
 			} else {
-				rendition.next();
+				reader.rendition.next();
 			}
 
 			$next.addClass("active");
@@ -4117,14 +4156,13 @@ EPUBJS.reader.ReaderController = function(book) {
 		}
 	}
 
-	document.addEventListener('keydown', arrowKeys, false);
 
 	$next.on("click", function(e){
 
-		if(book.package.metadata.direction === "rtl") {
-			rendition.prev();
+		if(reader.book.package.metadata.direction === "rtl") {
+			reader.rendition.prev();
 		} else {
-			rendition.next();
+			reader.rendition.next();
 		}
 
 		e.preventDefault();
@@ -4132,30 +4170,58 @@ EPUBJS.reader.ReaderController = function(book) {
 
 	$prev.on("click", function(e){
 
-		if(book.package.metadata.direction === "rtl") {
-			rendition.next();
+		if(reader.book.package.metadata.direction === "rtl") {
+			reader.rendition.next();
 		} else {
-			rendition.prev();
+			reader.rendition.prev();
 		}
 
 		e.preventDefault();
 	});
 
-	rendition.on("layout", function(props){
-		if(props.spread === true) {
-			showDivider();
-		} else {
-			hideDivider();
-		}
-	});
+	this.on("reader:bookready", function () {
+		$arrows.show();
+		document.addEventListener('keydown', arrowKeys, false);
 
-	rendition.on('relocated', function(location){
-		if (location.atStart) {
-			$prev.addClass("disabled");
-		}
-		if (location.atEnd) {
-			$next.addClass("disabled");
-		}
+		reader.rendition.on("layout", function(props){
+			if(props.spread === true) {
+				showDivider();
+			} else {
+				hideDivider();
+			}
+		});
+
+		reader.rendition.on('relocated', function(location){
+			if (location.atStart) {
+				$prev.addClass("disabled");
+			}
+			if (location.atEnd) {
+				$next.addClass("disabled");
+			}
+		});
+
+		reader.rendition.hooks.content.register(function(contents) {
+			var el = contents.document.documentElement;
+
+			if (el) {
+
+				//Enable swipe gesture to flip a page
+				var start;
+				var end;
+
+				el.addEventListener('touchstart', function(event) {
+					start = event.changedTouches[0];
+				});
+
+				el.addEventListener('touchend', function(event) {
+					end = event.changedTouches[0];
+					var hr = (end.screenX - start.screenX) / window.innerWidth;
+					var vr = Math.abs((end.screenY - start.screenY) / window.innerHeight);
+					if (hr > 0.1 && vr < 0.2) return reader.rendition.prev();
+					if (hr < -0.1 && vr < 0.2) return reader.rendition.next();
+				});
+			}
+		});
 	});
 
 	return {
@@ -4170,7 +4236,6 @@ EPUBJS.reader.ReaderController = function(book) {
 };
 
 EPUBJS.reader.SettingsController = function() {
-	var book = this.book;
 	var reader = this;
 	var $settings = $("#settings-modal"),
 			$overlay = $(".overlay");
@@ -4202,6 +4267,7 @@ EPUBJS.reader.SettingsController = function() {
 		"hide" : hide
 	};
 };
+
 EPUBJS.reader.SidebarController = function(book) {
 	var reader = this;
 
@@ -4213,7 +4279,7 @@ EPUBJS.reader.SidebarController = function(book) {
 	var changePanelTo = function(viewName) {
 		var controllerName = viewName + "Controller";
 		
-		if(activePanel == viewName || typeof reader[controllerName] === 'undefined' ) return;
+		if((activePanel == viewName && viewName != "Search") || typeof reader[controllerName] === 'undefined') return;
 		reader[activePanel+ "Controller"].hide();
 		reader[controllerName].show();
 		activePanel = viewName;
@@ -4252,12 +4318,12 @@ EPUBJS.reader.SidebarController = function(book) {
 		'changePanelTo' : changePanelTo
 	};
 };
-EPUBJS.reader.TocController = function(toc) {
-	var book = this.book;
-	var rendition = this.rendition;
 
-	var $list = $("#tocView"),
-			docfrag = document.createDocumentFragment();
+EPUBJS.reader.TocController = function(toc) {
+	var reader = this;
+	var book = this.book;
+
+	var $list = $("#tocView");
 
 	var currentChapter = false;
 
@@ -4327,33 +4393,36 @@ EPUBJS.reader.TocController = function(toc) {
 		}
 	};
 
-	rendition.on('renderered', chapterChange);
 
-	var tocitems = generateTocItems(toc);
+	this.on("reader:bookloaded", function (toc) {
+		$list.empty();
 
-	docfrag.appendChild(tocitems);
+		var tocitems = generateTocItems(toc);
 
-	$list.append(docfrag);
-	$list.find(".toc_link").on("click", function(event){
+		var docfrag = document.createDocumentFragment();
+		docfrag.appendChild(tocitems);
+
+		$list.append(docfrag);
+		$list.find(".toc_link").on("click", function(event){
 			var url = this.getAttribute('href');
 
 			event.preventDefault();
 
 			//-- Provide the Book with the url to show
 			//   The Url must be found in the books manifest
-			rendition.display(url);
+			reader.rendition.display(url);
 
 			$list.find(".currentChapter")
-					.addClass("openChapter")
-					.removeClass("currentChapter");
+				.addClass("openChapter")
+				.removeClass("currentChapter");
 
 			$(this).parent('li').addClass("currentChapter");
 
-	});
+		});
 
-	$list.find(".toc_toggle").on("click", function(event){
+		$list.find(".toc_toggle").on("click", function(event){
 			var $el = $(this).parent('li'),
-					open = $el.hasClass("openChapter");
+				open = $el.hasClass("openChapter");
 
 			event.preventDefault();
 			if(open){
@@ -4361,6 +4430,9 @@ EPUBJS.reader.TocController = function(toc) {
 			} else {
 				$el.addClass("openChapter");
 			}
+		});
+
+		reader.rendition.on('renderered', chapterChange);
 	});
 
 	return {
